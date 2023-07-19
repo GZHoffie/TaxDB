@@ -1,0 +1,13 @@
+__pycache__
+build
+#seqan3
+.pytest_cache
+.vscode
+*.fasta
+*.pickle
+*.zip
+cmake-build-debug
+tax_db/benchmark/index
+tax_db/benchmark/output
+tax_db/benchmark/output_temp
+tax_db/benchmark/log_temp
