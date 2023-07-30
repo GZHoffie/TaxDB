@@ -16,7 +16,7 @@ class TaxDBDownSampler:
             info = record.id.split('|')
             name = info[-1].strip()
             ncbiID = taxDict.getID(name)
-            genus = taxDict.getGenus(name)
+            genus = taxDict.getGenus(ncbiID)
             total_sequences += 1
 
             # take the sequence if it belongs to a genus that has fewer than self.numSamples genomes
@@ -36,7 +36,7 @@ class TaxDBDownSampler:
             
 
 if __name__ == "__main__":
-    sampler = TaxDBDownSampler()
+    sampler = TaxDBDownSampler(2)
     td = TaxonomyDict()
     td.readLookupTable("/home/zhenhao/data/taxonomy/genome_id_lookup.txt")
-    sampler.sampleDatabase("/home/zhenhao/data/taxonomy/DB.fa", td, "/home/zhenhao/data/taxonomy/DB_sampled.fa")
+    sampler.sampleDatabase("/home/zhenhao/data/taxonomy/DB.fa", td, "/home/zhenhao/data/taxonomy/DB_sampled_2.fa")

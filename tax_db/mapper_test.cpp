@@ -7,25 +7,24 @@
 #include <chrono>
 
 int main() {
-    using namespace seqan3::literals;
+    // parameters
+    unsigned int bucket_len = 65536;
+    unsigned int read_len = 310;
+    seqan3::shape shape{0b111111111_shape};
+    unsigned int samples = 30;
+    unsigned int fault = 20;
+    float distinguishability = 0.5;
 
-    std::vector<seqan3::dna4> text{"ACGTAGC"_dna4};
-    unsigned int k = 4;
-
-    auto hashes = text | seqan3::views::kmer_hash(seqan3::shape{0b1101_shape});
-    auto hashes_rev_comp_seqan = text | std::views::reverse | seqan3::views::complement | seqan3::views::kmer_hash(seqan3::shape{0b1101_shape});
-    seqan3::debug_stream << hashes_rev_comp_seqan << "\n";
-
-    auto hashes_rev_comp = hashes | std::views::transform([&](unsigned int hash) {
-        return hash_reverse_complement(hash, k);
-    });
-
-    seqan3::debug_stream << hashes << "\n" << hashes_rev_comp << "\n";
-
-
-    auto r = std::ranges::iota_view{0, 10};
-    seqan3::debug_stream << r << "\n";
+    // perform the mapping
+    auto mapper = new q_gram_mapper<33376>(bucket_len, read_len, shape, samples, fault, distinguishability);
+    mapper->load("/home/zhenhao/bucket-map/bucket_map/benchmark/index/", "DB_bucketmap");
+    auto res = mapper->map("/home/zhenhao/data/taxonomy/test/DB_300_0.1_10K.fastq");
     
+    
+    
+    
+    delete mapper;
+
 
 
     

@@ -6,6 +6,7 @@ build
 *.fasta
 *.pickle
 *.zip
+taxdump.tar.gz
 cmake-build-debug
 tax_db/benchmark/index
 tax_db/benchmark/output

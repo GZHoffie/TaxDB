@@ -35,11 +35,10 @@ class TaxonomyDict:
         else:
             return None
     
-    def getGenus(self, name):
+    def getGenus(self, ID):
         """
         Find the genus of a given species ID.
         """
-        ID = self.getID(name)
         if ID is None:
             return None
         

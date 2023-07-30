@@ -24,7 +24,7 @@ class short_read_simulator {
 private:
     // variables storing the sequence information
     std::vector<seqan3::bitpacked_sequence<seqan3::dna4>> bucket_sequence;
-    std::vector<std::pair<int, int>> bucket_ids;
+    std::vector<std::tuple<int, int, std::string>> bucket_ids;
     int bucket_length, read_length;
 
     // Error generation
@@ -148,7 +148,8 @@ public:
                 last_id = id;
                 reference_id++;
             } 
-            bucket_ids.push_back(std::make_pair(reference_id, index));
+            // each element contains the reference index, bucket id, and reference id string.
+            bucket_ids.push_back(std::make_tuple(reference_id, index, id));
             index++;
         };
         iterate_through_buckets(fasta_file_name, bucket_length, read_length, operation);
@@ -214,10 +215,11 @@ public:
         std::ofstream bucket_gt_file(output_path / (indicator + ".bucket_ground_truth"));
         std::ofstream pos_gt_file(output_path / (indicator + ".position_ground_truth"));
         for (unsigned int i = 0; i < size; i++) {
-            fastq_file << "@" << i << "\n";
             // generate sequence
             auto res = sample(simulate_error);
             auto & [sequence, bucket, offset, reverse_comp, cigar] = res;
+            auto true_position = bucket_ids[bucket];
+            fastq_file << "@" << i << " " << std::get<2>(true_position) << "\n";
             for (auto nt : sequence) {
                 fastq_file << nt.to_char();
             }
@@ -226,7 +228,6 @@ public:
             // record the ground truth.
             bucket_gt_file << bucket << " " << offset << " " << reverse_comp << " " << cigar.to_string() << "\n";
             // record the true locations
-            auto true_position = bucket_ids[bucket];
             pos_gt_file << std::get<0>(true_position) << " " << std::get<1>(true_position) * bucket_length + offset + 1 << " " << reverse_comp
                         << " " << cigar.to_string() << "\n";
         }

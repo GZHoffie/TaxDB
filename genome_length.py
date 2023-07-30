@@ -19,4 +19,4 @@ def read(fasta_file_name, bucket_length=65536):
     print("total number of references", num_references)
 
 if __name__ == "__main__":
-    read("/mnt/d/genome/GCA_000005845.2.fasta")
+    read("/home/zhenhao/data/taxonomy/DB.fa")
