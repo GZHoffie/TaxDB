@@ -87,39 +87,19 @@ public:
         filters[num_fault_tolerance - 1] &= input;
     }
 
-    std::vector<int> best_results() {
+    std::pair<std::vector<int>, int> best_results() {
         /**
-         * @brief Return the buckets that contains the most number of k-mers.
+         * @brief Return the buckets that contains the most number of k-mers,
+         *        as well as the number of k-mers that are missed
          */
         std::vector<int> res;
         for (int i = num_fault_tolerance-1; i >= 0; i--) {
             res = _set_bits(i);
             if (!res.empty()) {
-                return res;
+                return std::make_pair(res, i);
             }
         }
-        return res;
-    }
-
-    std::vector<int> ok_results() {
-        /**
-         * @brief Return the best `allowed_max_candidate_buckets` buckets.
-         */
-        std::vector<int> res;
-        for (int i = num_fault_tolerance-1; i >= 0; i--) {
-            if (i == 0 || (filters[i-1].count() > allowed_max_candidate_buckets && filters[i].count() != 0)) {
-                res = _set_bits(i);
-                return res;
-            }
-        }
-        return res;
-    }
-
-    std::vector<int> all_results() {
-        /**
-         * @brief Return all the acceptable buckets.
-         */
-        return _set_bits(0);
+        return std::make_pair(res, 0);
     }
 
     int _check_bucket(unsigned int bucket_id) {
@@ -192,8 +172,10 @@ private:
     unsigned int size;
 
     // bucket index related information
+    std::vector<std::string> bucket_to_species;
     unsigned int bucket_length;
     unsigned int read_length;
+    unsigned int num_segment_samples;
 
     // mapper related information
     unsigned int num_samples;
@@ -211,7 +193,8 @@ private:
 
 
     // sampling k-mers
-    Sampler* sampler;
+    Sampler* kmer_sampler;
+    Sampler* segment_sampler;
 
     std::bitset<NUM_BUCKETS> _bitset_from_bytes(const std::vector<char>& buf) {
         /**
@@ -255,14 +238,52 @@ private:
     }
 
 
+    std::vector<std::string> _determine_candidate_species(const std::unordered_map<std::string, int>& counter_orig,
+                                                          const std::unordered_map<std::string, int>& counter_rev_comp) {
+        /**
+         * @brief find the candidate species, given the outputs of the bucket mapping procedure.
+         * 
+         * @param counter_orig the candidate species given original string,
+         * @param counter_rev_comp the candidate species given the reverse complement of the string
+         * 
+         * @return a vector of all species that have the highest number of votes
+         * */                                                    
+
+        // Find the highest number of votes
+        int most_votes = 0;
+        std::vector<std::string> res;
+        for (auto &entry : counter_orig) {
+            if (entry.second > most_votes) {
+                res.clear();
+                res.push_back(entry.first);
+                most_votes = entry.second;
+            } else if (entry.second == most_votes) {
+                res.push_back(entry.first);
+            }
+        }
+        for (auto &entry : counter_rev_comp) {
+            if (entry.second > most_votes) {
+                res.clear();
+                res.push_back(entry.first);
+                most_votes = entry.second;
+            } else if (entry.second == most_votes) {
+                res.push_back(entry.first);
+            }
+        }
+        return res;
+    
+    }
+
+
 public:
-    q_gram_mapper(unsigned int bucket_len, unsigned int read_len, seqan3::shape shape, 
+    q_gram_mapper(unsigned int bucket_len, unsigned int segment_len, unsigned int segment_samples, seqan3::shape shape, 
                   unsigned int samples, unsigned int fault, float distinguishability,
                   unsigned int quality_threshold = 35, 
                   unsigned int num_candidate_buckets = 30) : mapper() {
         // initialize private variables
         bucket_length = bucket_len;
-        read_length = read_len;
+        read_length = segment_len;
+        num_segment_samples = segment_samples;
         
         q_gram_shape = shape;
         size = std::ranges::size(shape);
@@ -278,13 +299,15 @@ public:
         min_base_quality = quality_threshold * q;
 
         // Initialize sampler
-        sampler = new Sampler(num_samples);
+        kmer_sampler = new Sampler(num_samples);
+        segment_sampler = new Sampler(num_segment_samples);
     }
 
     ~q_gram_mapper() {
         delete filter;
         delete dist_filter;
-        delete sampler;
+        delete kmer_sampler;
+        delete segment_sampler;
     }
 
 
@@ -325,22 +348,31 @@ public:
             seqan3::debug_stream << "[INFO]\t\t" << "Successfully loaded " 
                                  << index_directory / (indicator + ".qgram") << "." << '\n';
         }
+
+        // read the bucket_id file
+        // NOTE: this is specific to the taxonomy dataset.
+        std::ifstream bucket_id(index_directory / (indicator + ".bucket_id"));
+        std::string name;
+        while (std::getline(bucket_id, name)) {
+            std::string species_name(name.substr(name.rfind("|") + 1));
+            bucket_to_species.push_back(species_name);
+        }
     }
 
 
-    std::vector<int> query(const std::vector<int>& q_gram_hash) {
+    std::pair<std::vector<int>, int> query(const std::vector<int>& q_gram_hash) {
         /**
          * @brief From `q_grams_index`, determine where the sequence may be coming from.
          * @param q_gram_hash the vector containing all hash values of q-grams in the
          *                    query sequence.
          * @returns a vector of integers indicating the possible regions that the sequence
-         *          may belong to.
+         *          may belong to, along with an integer showing how many k-mers are missed.
          */
         // q_grams_index should not be empty
         if (q_grams_index.empty()) {
             seqan3::debug_stream << "[ERROR]\t\t" << "The q-gram index is empty. Cannot accept query.\n";
             std::vector<int> res;
-            return res;
+            return std::make_pair(res, 0);
         }
         // Reset the filter
         filter->reset();
@@ -397,33 +429,30 @@ public:
                     std::mt19937{std::random_device{}()});
         */
         // Deterministically sample from the hash values.
-        sampler->sample_deterministically(hash_values.size()-1);
-        for (auto sample : sampler->samples) {
+        kmer_sampler->sample_deterministically(hash_values.size()-1);
+        for (auto sample : kmer_sampler->samples) {
             samples_orig.push_back(hash_values[sample]);
         }
-        
-        candidates_orig = query(samples_orig);
+
+        auto [buckets_orig, vote_orig] = query(samples_orig);
 
         // query the reverse complements of the sampled k-mers
         auto samples_rev_comp = samples_orig | std::views::transform([&](unsigned int hash) {
             return hash_reverse_complement(hash, q);
         });
         std::vector<int> samples_rev_comp_vec(samples_rev_comp.begin(), samples_rev_comp.end());
-        candidates_rev_comp = query(samples_rev_comp_vec);
-        if (candidates_orig.size() > allowed_max_candidate_buckets) {
-            candidates_orig.clear();
-        }
-        if (candidates_rev_comp.size() > allowed_max_candidate_buckets) {
-            candidates_rev_comp.clear();
-        }
+        auto [buckets_rev, vote_rev] = query(samples_rev_comp_vec);
+
+        // TODO: take the number of missed k-mers into consideration
+        if (vote_rev >= vote_orig) candidates_rev_comp = buckets_rev;
+        if (vote_orig >= vote_rev) candidates_orig = buckets_orig;
         
         return std::make_pair(candidates_orig, candidates_rev_comp);
-        
     }
 
 
 
-    std::pair<std::vector<std::vector<unsigned int>>, std::vector<std::vector<unsigned int>>>
+    std::vector<std::vector<std::string>>
     map(std::filesystem::path const & sequence_file) {
         /**
          * @brief Read a query fastq file and output the ids of the sequence that are mapped 
@@ -434,31 +463,57 @@ public:
         unsigned int num_buckets_orig = 0, num_buckets_rev_comp = 0;
         
         seqan3::sequence_file_input<_phred94_traits> fin{sequence_file};
+
         // initialize returning result
-        std::vector<std::vector<unsigned int>> res_orig;
-        std::vector<std::vector<unsigned int>> res_rev_comp;
-        for (int i = 0; i < NUM_BUCKETS; i++) {
-            std::vector<unsigned int> sequence_ids_orig;
-            res_orig.push_back(sequence_ids_orig);
-            std::vector<unsigned int> sequence_ids_rev_comp;
-            res_rev_comp.push_back(sequence_ids_rev_comp);
-        }
+        std::vector<std::vector<std::string>> res;
 
         Timer clock;
         clock.tick();
         for (auto & rec : fin) {
-            // find if read is present in the buckets
-            auto [buckets_orig, buckets_rev_comp] = query_sequence(rec.sequence(), rec.base_qualities());
-            for (auto & b : buckets_orig) {
-                res_orig[b].push_back(num_records);
+            // count the species that appears the most in the prediction.
+            std::unordered_map<std::string, int> counter_orig;
+            std::unordered_map<std::string, int> counter_rev_comp;
+            std::unordered_set<std::string> votes;
+
+            // initialize return value
+            std::vector<std::string> predicted_species;
+
+            // divide the query sequence into segments, and query each segment individually.
+            unsigned int total_segments = rec.sequence().size() / read_length;
+            // sample segments from the whole sequence
+            segment_sampler->sample_deterministically(rec.sequence().size() / read_length - 1);
+            for (auto i : segment_sampler->samples) {
+                seqan3::dna4_vector segment_sequence(rec.sequence().begin() + i * read_length, 
+                                                     rec.sequence().begin() + (i+1) * read_length);
+                std::vector<seqan3::phred94> segment_quality(rec.base_qualities().begin() + i * read_length, 
+                                                             rec.base_qualities().begin() + (i+1) * read_length);
+                auto [buckets_orig, buckets_rev_comp] = query_sequence(segment_sequence, segment_quality);
+
+                // count the votes, for original sequence and the reverse complement.
+                votes.clear();
+                for (auto bucket : buckets_orig) {
+                    votes.emplace(bucket_to_species[bucket]);
+                }
+                for (auto vote : votes) {
+                    counter_orig[vote]++;
+                }
+
+                votes.clear();
+                for (auto bucket : buckets_rev_comp) {
+                    votes.emplace(bucket_to_species[bucket]);
+                }
+                for (auto vote : votes) {
+                    counter_rev_comp[vote]++;
+                }
             }
-            for (auto & b_ : buckets_rev_comp) {
-                res_rev_comp[b_].push_back(num_records);
-            }
-            if (!buckets_orig.empty() || !buckets_rev_comp.empty()) {
+
+            predicted_species = _determine_candidate_species(counter_orig, counter_rev_comp);
+            num_buckets_orig += predicted_species.size();
+            res.push_back(predicted_species);
+
+
+            if (!predicted_species.empty()) {
                 ++mapped_reads;
-                num_buckets_orig += buckets_orig.size();
-                num_buckets_rev_comp += buckets_rev_comp.size();
             }
             ++num_records;
         }
@@ -468,11 +523,9 @@ public:
                              << time << " s (" << time * 1000 * 1000 / num_records << " μs/seq).\n";
         seqan3::debug_stream << "[BENCHMARK]\t" << "Number of reads that have at least one candidate bucket: " 
                              << mapped_reads << "  (" << ((float)mapped_reads) / num_records * 100 << "%).\n";
-        seqan3::debug_stream << "[BENCHMARK]\t" << "Average number of buckets an original read is mapped to: " 
+        seqan3::debug_stream << "[BENCHMARK]\t" << "Average number of buckets a read is mapped to: " 
                              << ((float) num_buckets_orig) / mapped_reads << ".\n";
-        seqan3::debug_stream << "[BENCHMARK]\t" << "Average number of buckets a reverse complement of the read is mapped to: " 
-                             << ((float) num_buckets_rev_comp) / mapped_reads << ".\n";
-        return std::make_pair(res_orig, res_rev_comp);
+        return res;
     }
 
 

@@ -19,4 +19,4 @@ def read(fasta_file_name, bucket_length=65536):
     print("total number of references", num_references)
 
 if __name__ == "__main__":
-    read("/home/zhenhao/data/taxonomy/DB.fa")
+    read("/home/zhenhao/data/taxonomy/DB_sampled.fa")
