@@ -46,7 +46,8 @@ protected:
          *                   between 0 and NUM_BUCKETS - 1.
          */
         // Extract all q_grams from sequence
-        for (auto && value : sequence | seqan3::views::kmer_hash(q_gram_shape)) {
+        for (auto && value : sequence 
+             | seqan3::views::minimiser_hash(q_gram_shape, seqan3::window_size{q}, seqan3::seed{0})) {
             q_grams_index[value].set(bucket_num);
         }
     }

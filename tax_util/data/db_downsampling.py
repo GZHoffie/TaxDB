@@ -40,7 +40,7 @@ class TaxDBDownSampler:
             
 
 if __name__ == "__main__":
-    sampler = TaxDBDownSampler(1)
+    sampler = TaxDBDownSampler(2)
     td = TaxonomyDict()
     td.readLookupTable("/home/zhenhao/data/taxonomy/genome_id_lookup.txt")
     sampler.sampleDatabase("/home/zhenhao/data/taxonomy/DB_long.fa", td, "/home/zhenhao/data/taxonomy/DB_long_sampled.fa")
