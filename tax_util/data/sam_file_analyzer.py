@@ -65,7 +65,7 @@ if __name__ == "__main__":
     td = TaxonomyDict()
     td.readLookupTable("/home/zhenhao/data/taxonomy/genome_id_lookup.txt")
     sa = SamFileAnalyzer(td)
-    sa.readGroundTruthFile("/home/zhenhao/data/taxonomy/test/DB_12K_0.1_10K.fastq")
+    sa.readGroundTruthFile("/home/zhenhao/data/taxonomy/test/DB_long_12K_0.1_10K.fastq")
     sa.analyzeOutputFile("/home/zhenhao/TaxDB/DB_12K_0.1_10K.output")
 
 

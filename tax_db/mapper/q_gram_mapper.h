@@ -102,6 +102,14 @@ public:
         return std::make_pair(res, 0);
     }
 
+    std::pair<std::vector<int>, int> all_results() {
+        /**
+         * @brief Return the buckets that contains adequate number of k-mers,
+         *        as well as the number of k-mers that are missed
+         */
+        return std::make_pair(_set_bits(0), 0);
+    }
+
     int _check_bucket(unsigned int bucket_id) {
         /**
          * @brief Check how many errors actually present in the true bucket.

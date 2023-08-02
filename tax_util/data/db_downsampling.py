@@ -20,12 +20,15 @@ class TaxDBDownSampler:
             total_sequences += 1
 
             # take the sequence if it belongs to a genus that has fewer than self.numSamples genomes
-            if genus not in self.sampledSpecies:
-                self.sampledSpecies[genus] = set([ncbiID])
-            if ncbiID in self.sampledSpecies[genus] or len(self.sampledSpecies[genus]) < self.numSamples:
-                self.sampledSpecies[genus].add(ncbiID)
-                sequences.append(record)
-                sampled_sequences += 1
+            
+            # Get rid of sequences that are too short
+            if len(str(record.seq)) >= 100000:
+                if genus not in self.sampledSpecies:
+                    self.sampledSpecies[genus] = set([ncbiID])
+                if ncbiID in self.sampledSpecies[genus] or len(self.sampledSpecies[genus]) < self.numSamples:
+                    self.sampledSpecies[genus].add(ncbiID)
+                    sequences.append(record)
+                    sampled_sequences += 1
             
         
         # Write the sampled genome to a new fasta file
@@ -33,10 +36,11 @@ class TaxDBDownSampler:
             SeqIO.write(sequences, output_handle, "fasta")
 
         print(sampled_sequences, "sequences sampled out of", total_sequences, "references. The output fasta is written to", outputDir)
+        print(len(self.sampledSpecies))
             
 
 if __name__ == "__main__":
-    sampler = TaxDBDownSampler(2)
+    sampler = TaxDBDownSampler(1)
     td = TaxonomyDict()
     td.readLookupTable("/home/zhenhao/data/taxonomy/genome_id_lookup.txt")
-    sampler.sampleDatabase("/home/zhenhao/data/taxonomy/DB.fa", td, "/home/zhenhao/data/taxonomy/DB_sampled_2.fa")
+    sampler.sampleDatabase("/home/zhenhao/data/taxonomy/DB_long.fa", td, "/home/zhenhao/data/taxonomy/DB_long_sampled.fa")
