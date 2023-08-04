@@ -1,7 +1,7 @@
 from Bio import SeqIO
 import math
 
-def read(fasta_file_name, bucket_length=65536):
+def read(fasta_file_name, bucket_length=32768):
     print("Opening FASTA file:", fasta_file_name)
     fasta_sequences = SeqIO.parse(open(fasta_file_name), 'fasta')
     total_buckets = 0

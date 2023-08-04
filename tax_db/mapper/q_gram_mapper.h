@@ -17,7 +17,7 @@
 #include <iostream>
 #include <algorithm>
 
-#include <seqan3/search/views/minimiser_hash.hpp>
+#include <seqan3/search/views/kmer_hash.hpp>
 #include <seqan3/search/kmer_index/shape.hpp>
 #include <seqan3/search/views/minimiser.hpp>
 
@@ -146,7 +146,7 @@ public:
         int valid_q_grams = 0;
         for (auto &i: q_grams_index) {
             unsigned int ones = i.count();
-            if (NUM_BUCKETS - ones > threshold && ones != 0) {
+            if (NUM_BUCKETS - ones > threshold) {
                 valid_q_grams++;
             }
             if (ones == 0) {
@@ -160,8 +160,8 @@ public:
                              << valid_q_grams << " (" << ((float) valid_q_grams) / q_grams_index.size() * 100 << "%).\n";
     }
 
-    bool is_highly_distinguishable(unsigned int minimiser_hash) {
-        return zeros[minimiser_hash] >= threshold && zeros[minimiser_hash] < NUM_BUCKETS;
+    bool is_highly_distinguishable(unsigned int kmer_hash) {
+        return zeros[kmer_hash] >= threshold;
     }
 };
 
@@ -245,6 +245,42 @@ private:
         assert(high_quality_kmers.size() == quality.size() - q + 1);
     }
 
+
+    std::vector<std::string> _determine_candidate_species(const std::unordered_map<std::string, int>& counter_orig,
+                                                          const std::unordered_map<std::string, int>& counter_rev_comp) {
+        /**
+         * @brief find the candidate species, given the outputs of the bucket mapping procedure.
+         * 
+         * @param counter_orig the candidate species given original string,
+         * @param counter_rev_comp the candidate species given the reverse complement of the string
+         * 
+         * @return a vector of all species that have the highest number of votes
+         * */                                                    
+
+        // Find the highest number of votes
+        int most_votes = 0;
+        std::vector<std::string> res;
+        for (auto &entry : counter_orig) {
+            if (entry.second > most_votes) {
+                res.clear();
+                res.push_back(entry.first);
+                most_votes = entry.second;
+            } else if (entry.second == most_votes) {
+                res.push_back(entry.first);
+            }
+        }
+        for (auto &entry : counter_rev_comp) {
+            if (entry.second > most_votes) {
+                res.clear();
+                res.push_back(entry.first);
+                most_votes = entry.second;
+            } else if (entry.second == most_votes) {
+                res.push_back(entry.first);
+            }
+        }
+        return res;
+    
+    }
 
 
 public:
@@ -358,7 +394,7 @@ public:
         //return filter->ok_results();
     }
 
-    std::pair<std::vector<int>, int>
+    std::tuple<std::vector<int>, std::vector<int>, int> 
     query_sequence(const std::vector<seqan3::dna4>& sequence,
                    const std::vector<seqan3::phred94>& quality) {
         /**
@@ -371,32 +407,29 @@ public:
          *          reverse complementing.
          */
         // initialize results
-        std::vector<int> candidates;
+        std::vector<int> candidates_orig;
+        std::vector<int> candidates_rev_comp;
         
         // get satisfactory k-mers that passes through quality filter and distinguishability filter
-        auto kmers = sequence | seqan3::views::minimiser_hash(q_gram_shape, seqan3::window_size{q}, seqan3::seed{0});
-        std::vector<unsigned int> minimisers;
-        for (auto m : kmers) {
-            minimisers.push_back(m);
-        }
+        auto kmers = sequence | seqan3::views::kmer_hash(q_gram_shape);
         auto kmer_qualities = quality | seqan3::views::kmer_quality(q_gram_shape);
         //_high_quality_kmers(quality);
         std::vector<unsigned int> qualities(kmer_qualities.begin(), kmer_qualities.end());
-        int num_kmers = minimisers.size();
+        int num_kmers = kmers.size();
 
         auto good_kmers = std::ranges::iota_view{0, num_kmers} | std::views::filter([&](unsigned int i) {
-                              return dist_filter->is_highly_distinguishable(minimisers[i]) && qualities[i] >= min_base_quality;
+                              return dist_filter->is_highly_distinguishable(kmers[i]) && qualities[i] >= min_base_quality;
                           }) | std::views::transform([&](unsigned int i) {
-                              return minimisers[i];
+                              return kmers[i];
                           });
         std::vector<int> hash_values(good_kmers.begin(), good_kmers.end());
 
         // if not enough q-grams ramained to determine the exact location, simply ignore this query sequence.
         if (hash_values.size() < 0.2 * num_samples){
-            return std::make_pair(candidates, 0);
+            return std::make_tuple(candidates_orig, candidates_rev_comp, 0);
         }
 
-        std::vector<int> samples;
+        std::vector<int> samples_orig;
         /*
         // Randomly sample `num_samples` q-grams for query.
         std::sample(hash_values.begin(), hash_values.end(), 
@@ -406,10 +439,23 @@ public:
         // Deterministically sample from the hash values.
         kmer_sampler->sample_deterministically(hash_values.size()-1);
         for (auto sample : kmer_sampler->samples) {
-            samples.push_back(hash_values[sample]);
+            samples_orig.push_back(hash_values[sample]);
         }
 
-        return query(samples);
+        auto [buckets_orig, vote_orig] = query(samples_orig);
+
+        // query the reverse complements of the sampled k-mers
+        auto samples_rev_comp = samples_orig | std::views::transform([&](unsigned int hash) {
+            return hash_reverse_complement(hash, q);
+        });
+        std::vector<int> samples_rev_comp_vec(samples_rev_comp.begin(), samples_rev_comp.end());
+        auto [buckets_rev, vote_rev] = query(samples_rev_comp_vec);
+
+        // TODO: take the number of missed k-mers into consideration
+        if (vote_rev >= vote_orig) candidates_rev_comp = buckets_rev;
+        if (vote_orig >= vote_rev) candidates_orig = buckets_orig;
+        
+        return std::make_tuple(candidates_orig, candidates_rev_comp, std::max(vote_rev, vote_orig));
     }
 
 
@@ -433,44 +479,41 @@ public:
         clock.tick();
         for (auto & rec : fin) {
             // count the species that appears the most in the prediction.
-            std::unordered_map<std::string, int> counter;
+            std::unordered_map<std::string, int> counter_orig;
+            std::unordered_map<std::string, int> counter_rev_comp;
             std::unordered_set<std::string> votes;
 
             // initialize return value
             std::vector<std::string> predicted_species;
 
-            // divide the query sequence into segments, and query each segment individually.
-            unsigned int total_segments = rec.sequence().size() / read_length;
             // sample segments from the whole sequence
-            segment_sampler->sample_deterministically(rec.sequence().size() / read_length - 1);
+            segment_sampler->sample_deterministically(rec.sequence().size() - read_length - 1);
             for (auto i : segment_sampler->samples) {
-                seqan3::dna4_vector segment_sequence(rec.sequence().begin() + i * read_length, 
-                                                     rec.sequence().begin() + (i+1) * read_length);
-                std::vector<seqan3::phred94> segment_quality(rec.base_qualities().begin() + i * read_length, 
-                                                             rec.base_qualities().begin() + (i+1) * read_length);
-                auto [buckets, num_votes] = query_sequence(segment_sequence, segment_quality);
+                seqan3::dna4_vector segment_sequence(rec.sequence().begin() + i, 
+                                                     rec.sequence().begin() + i + read_length);
+                std::vector<seqan3::phred94> segment_quality(rec.base_qualities().begin() + i, 
+                                                             rec.base_qualities().begin() + i + read_length);
+                auto [buckets_orig, buckets_rev_comp, num_votes] = query_sequence(segment_sequence, segment_quality);
 
                 // count the votes, for original sequence and the reverse complement.
                 votes.clear();
-                for (auto bucket : buckets) {
+                for (auto bucket : buckets_orig) {
                     votes.emplace(bucket_to_species[bucket]);
                 }
                 for (auto vote : votes) {
-                    counter[vote] += num_votes;
+                    counter_orig[vote] += num_votes;
+                }
+
+                votes.clear();
+                for (auto bucket : buckets_rev_comp) {
+                    votes.emplace(bucket_to_species[bucket]);
+                }
+                for (auto vote : votes) {
+                    counter_rev_comp[vote] += num_votes;
                 }
             }
 
-            unsigned int max_votes = 0;
-            for (auto & entry : counter) {
-                if (entry.second > max_votes) {
-                    max_votes = entry.second;
-                    predicted_species.clear();
-                }
-                if (entry.second == max_votes) {
-                    predicted_species.push_back(entry.first);
-                }
-            }
-
+            predicted_species = _determine_candidate_species(counter_orig, counter_rev_comp);
             num_buckets_orig += predicted_species.size();
             res.push_back(predicted_species);
 
