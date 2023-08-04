@@ -246,42 +246,6 @@ private:
     }
 
 
-    std::vector<std::string> _determine_candidate_species(const std::unordered_map<std::string, int>& counter_orig,
-                                                          const std::unordered_map<std::string, int>& counter_rev_comp) {
-        /**
-         * @brief find the candidate species, given the outputs of the bucket mapping procedure.
-         * 
-         * @param counter_orig the candidate species given original string,
-         * @param counter_rev_comp the candidate species given the reverse complement of the string
-         * 
-         * @return a vector of all species that have the highest number of votes
-         * */                                                    
-
-        // Find the highest number of votes
-        int most_votes = 0;
-        std::vector<std::string> res;
-        for (auto &entry : counter_orig) {
-            if (entry.second > most_votes) {
-                res.clear();
-                res.push_back(entry.first);
-                most_votes = entry.second;
-            } else if (entry.second == most_votes) {
-                res.push_back(entry.first);
-            }
-        }
-        for (auto &entry : counter_rev_comp) {
-            if (entry.second > most_votes) {
-                res.clear();
-                res.push_back(entry.first);
-                most_votes = entry.second;
-            } else if (entry.second == most_votes) {
-                res.push_back(entry.first);
-            }
-        }
-        return res;
-    
-    }
-
 
 public:
     q_gram_mapper(unsigned int bucket_len, unsigned int segment_len, unsigned int segment_samples, seqan3::shape shape, 
@@ -394,7 +358,7 @@ public:
         //return filter->ok_results();
     }
 
-    std::vector<int>
+    std::pair<std::vector<int>, int>
     query_sequence(const std::vector<seqan3::dna4>& sequence,
                    const std::vector<seqan3::phred94>& quality) {
         /**
@@ -429,7 +393,7 @@ public:
 
         // if not enough q-grams ramained to determine the exact location, simply ignore this query sequence.
         if (hash_values.size() < 0.2 * num_samples){
-            return candidates;
+            return std::make_pair(candidates, 0);
         }
 
         std::vector<int> samples;
@@ -445,8 +409,7 @@ public:
             samples.push_back(hash_values[sample]);
         }
 
-        auto [buckets, vote] = query(samples);
-        return buckets;
+        return query(samples);
     }
 
 
@@ -485,7 +448,7 @@ public:
                                                      rec.sequence().begin() + (i+1) * read_length);
                 std::vector<seqan3::phred94> segment_quality(rec.base_qualities().begin() + i * read_length, 
                                                              rec.base_qualities().begin() + (i+1) * read_length);
-                auto buckets = query_sequence(segment_sequence, segment_quality);
+                auto [buckets, num_votes] = query_sequence(segment_sequence, segment_quality);
 
                 // count the votes, for original sequence and the reverse complement.
                 votes.clear();
@@ -493,7 +456,7 @@ public:
                     votes.emplace(bucket_to_species[bucket]);
                 }
                 for (auto vote : votes) {
-                    counter[vote]++;
+                    counter[vote] += num_votes;
                 }
             }
 

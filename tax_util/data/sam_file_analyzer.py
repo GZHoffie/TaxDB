@@ -5,7 +5,7 @@ class SamFileAnalyzer:
         self.groundTruth = []
         self.taxDict = taxDict
 
-    def readGroundTruthFile(self, groundTruthFile):
+    def readGroundTruthFastq(self, groundTruthFile):
         with open(groundTruthFile, 'r') as f:
             for line in f.readlines():
                 if line.startswith('@'):
@@ -14,6 +14,12 @@ class SamFileAnalyzer:
                     info = ref.split('|')
                     ncbiID = self.taxDict.getID(info[-1].strip())
                     self.groundTruth.append(ncbiID)
+    
+    def readGroundTruthFile(self, groundTruthFile):
+        with open(groundTruthFile, 'r') as f:
+            for line in f.readlines():
+                ncbiID = int(line)
+                self.groundTruth.append(ncbiID)
     
 
     def analyzeOutputFile(self, samFile):
@@ -54,6 +60,7 @@ class SamFileAnalyzer:
                 
                 index += 1
 
+        print("Total number of reads:", index)
         print("Total number of predictions:", num_predictions)
         print("Genus-level sensitivity:", correct_genus_prediction / index)
         print("Species-level sensitivity:", correct_species_prediction / index)
@@ -65,8 +72,8 @@ if __name__ == "__main__":
     td = TaxonomyDict()
     td.readLookupTable("/home/zhenhao/data/taxonomy/genome_id_lookup.txt")
     sa = SamFileAnalyzer(td)
-    sa.readGroundTruthFile("/home/zhenhao/data/taxonomy/test/DB_long_12K_0.1_10K.fastq")
-    sa.analyzeOutputFile("/home/zhenhao/TaxDB/DB_12K_0.1_10K.output")
+    sa.readGroundTruthFile("/home/zhenhao/data/taxonomy/mock/com31.labels.csv")
+    sa.analyzeOutputFile("/home/zhenhao/TaxDB/com31.output")
 
 
 
