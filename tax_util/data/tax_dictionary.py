@@ -51,6 +51,18 @@ class TaxonomyDict:
                 return i
         
         return None
+    
+    def outputLookupTable(self, outputTablePath):
+        """
+        Given a lookup table, output another table with genus information.
+        """
+        with open(outputTablePath, 'w') as f:
+            for name in self.name2id:
+                ncbiID = self.name2id[name]
+                genus = self.getGenus(ncbiID)
+                f.write(name + '\t' + str(ncbiID) + '\t' + str(genus) + '\n')
+
+
 
         
     
@@ -59,5 +71,6 @@ class TaxonomyDict:
 if __name__ == "__main__":
     td = TaxonomyDict()
     td.readLookupTable("/home/zhenhao/data/taxonomy/genome_id_lookup.txt")
-    print(td.getGenus('NC_014722.1'))
+    td.outputLookupTable("/home/zhenhao/data/taxonomy/genome_id_genus_lookup.txt")
+    #print(td.getGenus('NC_014722.1'))
     #print(td.name2id)

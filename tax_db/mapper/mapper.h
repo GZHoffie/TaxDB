@@ -12,18 +12,13 @@ public:
     unsigned int num_records = 0;
     
     /**
-     * @brief Load the q-gram index file to the mapper.
-     */
-    virtual void load(std::filesystem::path const & index_file, const std::string & indicator) = 0;
-
-    /**
      * @brief Read a query fastq file and output the ids of the sequence that are mapped 
      *        to each bucket.
      * 
-     * @returns A vector, where each element correspond to a read. Each element is a vector of strings,
-     *          representing the predicted species it belongs to.
+     * @returns A vector, where each element correspond to a read. Each element is a vector of integers,
+     *          representing the predicted genus it belongs to.
      */
-    virtual std::vector<std::vector<std::string>>
+    virtual std::vector<std::vector<int>>
     map(std::filesystem::path const & sequence_file) = 0;
 
     /**

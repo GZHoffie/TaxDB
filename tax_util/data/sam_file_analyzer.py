@@ -43,7 +43,9 @@ class SamFileAnalyzer:
                 for prediction in line.split(' '):
                     if prediction != '\n':
                         num_predictions += 1
-                    ncbiID = self.taxDict.getID(prediction)
+                    else:
+                        continue
+                    ncbiID = int(prediction)
                     if ncbiID == groundTruth:
                         correct_species = True
                         num_correct_species_predictions += 1

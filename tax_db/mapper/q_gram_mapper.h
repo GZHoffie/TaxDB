@@ -199,10 +199,26 @@ private:
     unsigned int min_base_quality;
     std::vector<bool> high_quality_kmers;
 
-
     // sampling k-mers
     Sampler* kmer_sampler;
     Sampler* segment_sampler;
+
+    // Name/species/genus information
+    std::unordered_map<std::string, int> name_to_species;
+    std::unordered_map<std::string, int> name_to_genus;
+
+    void _read_dictionary(std::filesystem::path dict_path) {
+        std::ifstream is(dict_path);
+        std::string name;
+        unsigned int species_id, genus_id;
+        while (is) {
+            is >> name >> species_id >> genus_id;
+            name_to_species[name] = species_id;
+            name_to_genus[name] = genus_id;
+        }
+        seqan3::debug_stream << "[INFO]\t\tSuccessfully loaded dictionary from path " << dict_path << ".\n";
+        is.close();
+    }
 
     std::bitset<NUM_BUCKETS> _bitset_from_bytes(const std::vector<char>& buf) {
         /**
@@ -246,8 +262,8 @@ private:
     }
 
 
-    std::vector<std::string> _determine_candidate_species(const std::unordered_map<std::string, int>& counter_orig,
-                                                          const std::unordered_map<std::string, int>& counter_rev_comp) {
+    std::vector<int> _determine_candidate_species(const std::unordered_map<int, int>& counter_orig,
+                                                  const std::unordered_map<int, int>& counter_rev_comp) {
         /**
          * @brief find the candidate species, given the outputs of the bucket mapping procedure.
          * 
@@ -259,23 +275,19 @@ private:
 
         // Find the highest number of votes
         int most_votes = 0;
-        std::vector<std::string> res;
+        std::vector<int> res;
         for (auto &entry : counter_orig) {
-            if (entry.second > most_votes) {
+            if (entry.second >= most_votes) {
                 res.clear();
                 res.push_back(entry.first);
                 most_votes = entry.second;
-            } else if (entry.second == most_votes) {
-                res.push_back(entry.first);
             }
         }
         for (auto &entry : counter_rev_comp) {
-            if (entry.second > most_votes) {
+            if (entry.second >= most_votes) {
                 res.clear();
                 res.push_back(entry.first);
                 most_votes = entry.second;
-            } else if (entry.second == most_votes) {
-                res.push_back(entry.first);
             }
         }
         return res;
@@ -319,10 +331,11 @@ public:
     }
 
 
-    void load(std::filesystem::path const & index_directory, const std::string& indicator) {
+    void load(std::filesystem::path const & dict_directory, std::filesystem::path const & index_directory, const std::string& indicator) {
         /**
          * @brief Look for index and pattern file inside the index_directory,
          *        read the files and store the values in class attribute.
+         * @param dict_dicrectory the directory that stores the name to species/genus id file.
          * @param index_directory the directory that stores the q_gram_count_file.
          */
         // q_grams_index should be empty
@@ -365,6 +378,9 @@ public:
             std::string species_name(name.substr(name.rfind("|") + 1));
             bucket_to_species.push_back(species_name);
         }
+
+        // read the dictionary
+        _read_dictionary(dict_directory);
     }
 
 
@@ -460,7 +476,7 @@ public:
 
 
 
-    std::vector<std::vector<std::string>>
+    std::vector<std::vector<int>>
     map(std::filesystem::path const & sequence_file) {
         /**
          * @brief Read a query fastq file and output the ids of the sequence that are mapped 
@@ -473,18 +489,18 @@ public:
         seqan3::sequence_file_input<_phred94_traits> fin{sequence_file};
 
         // initialize returning result
-        std::vector<std::vector<std::string>> res;
+        std::vector<std::vector<int>> res;
 
         Timer clock;
         clock.tick();
         for (auto & rec : fin) {
             // count the species that appears the most in the prediction.
-            std::unordered_map<std::string, int> counter_orig;
-            std::unordered_map<std::string, int> counter_rev_comp;
-            std::unordered_set<std::string> votes;
+            std::unordered_map<int, int> counter_orig;
+            std::unordered_map<int, int> counter_rev_comp;
+            std::unordered_set<int> votes;
 
             // initialize return value
-            std::vector<std::string> predicted_species;
+            std::vector<int> predicted_species;
 
             // sample segments from the whole sequence
             segment_sampler->sample_deterministically(rec.sequence().size() - read_length - 1);
@@ -498,7 +514,7 @@ public:
                 // count the votes, for original sequence and the reverse complement.
                 votes.clear();
                 for (auto bucket : buckets_orig) {
-                    votes.emplace(bucket_to_species[bucket]);
+                    votes.emplace(name_to_species[bucket_to_species[bucket]]);
                 }
                 for (auto vote : votes) {
                     counter_orig[vote] += num_votes;
@@ -506,7 +522,7 @@ public:
 
                 votes.clear();
                 for (auto bucket : buckets_rev_comp) {
-                    votes.emplace(bucket_to_species[bucket]);
+                    votes.emplace(name_to_species[bucket_to_species[bucket]]);
                 }
                 for (auto vote : votes) {
                     counter_rev_comp[vote] += num_votes;
