@@ -96,7 +96,8 @@ set(MAPPER_FILES
     mapper/mapper.h
     mapper/q_gram_mapper.h
     mapper/fm_index_mapper.h
-    mapper/quality_filter.h)
+    mapper/quality_filter.h
+    mapper/consensus_mapper.h)
 
 set(UTIL_FILES
     utils.h

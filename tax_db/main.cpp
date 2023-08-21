@@ -1,6 +1,5 @@
 #include "indexer/bucket_hash_indexer.h"
 #include "mapper/q_gram_mapper.h"
-#include "locator/bucket_locator.h"
 #include "tools/short_read_simulator.h"
 #include "./utils.h"
 
