@@ -463,11 +463,11 @@ public:
                     std::mt19937{std::random_device{}()});
         */
         // Deterministically sample from the hash values.
-        kmer_sampler->sample_deterministically(hash_values.size()-k-1);
+        kmer_sampler->sample_deterministically(hash_values.size()-2 * k-1);
         for (auto sample : kmer_sampler->samples) {
             std::vector<unsigned int> samples;
-            for (int i = 0; i < k; i++) {
-                samples.push_back(hash_values[sample + i]);
+            for (int i = -k; i < k; i++) {
+                samples.push_back(hash_values[sample + k + i]);
             }
             samples_orig.push_back(samples);
         }
@@ -546,6 +546,8 @@ public:
                 for (auto vote : votes) {
                     counter_rev_comp[vote] += num_votes;
                 }
+
+                if (!buckets_orig.empty() || !buckets_rev_comp.empty()) break;
             }
 
             predicted_species = _determine_candidate_species(counter_orig, counter_rev_comp);
