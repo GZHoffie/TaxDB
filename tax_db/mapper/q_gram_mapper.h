@@ -466,7 +466,7 @@ public:
         kmer_sampler->sample_deterministically(hash_values.size()-2 * k-1);
         for (auto sample : kmer_sampler->samples) {
             std::vector<unsigned int> samples;
-            for (int i = -k; i < k; i++) {
+            for (int i = -k; i <= k; i++) {
                 samples.push_back(hash_values[sample + k + i]);
             }
             samples_orig.push_back(samples);

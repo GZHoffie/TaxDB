@@ -30,7 +30,7 @@ int main() {
 
     std::filesystem::path genome_path("/home/zhenhao/data/taxonomy/DB.fa");
     std::filesystem::path index_path("/home/zhenhao/TaxDB/tax_db/benchmark/index/");
-    std::filesystem::path query_path("/home/zhenhao/data/taxonomy/mock/com31.merged.fastq");
+    std::filesystem::path query_path("/home/zhenhao/data/taxonomy/mock/sampled.fastq");
     std::filesystem::path dict_path("/home/zhenhao/data/taxonomy/genome_id_genus_lookup.txt");
     std::string indicator("DB");
 
@@ -42,7 +42,7 @@ int main() {
     auto mapper = new q_gram_mapper<33371>(bucket_len, read_len, segment_samples, shape, 2, samples, fault, distinguishability);
     mapper->load(dict_path, index_path, indicator);
     auto res = mapper->map(query_path);
-    _output("/home/zhenhao/TaxDB/com31.output", res);
+    _output("/home/zhenhao/TaxDB/sampled.output", res);
     
     
     delete indexer;
