@@ -23,9 +23,9 @@ int main() {
     unsigned int bucket_len = 65536;
     unsigned int read_len = 300;
     seqan3::shape shape{0b111111111_shape};
-    unsigned int samples = 40;
+    unsigned int samples = 20;
     unsigned int segment_samples = 30;
-    unsigned int fault = 25; 
+    unsigned int fault = 10;
     float distinguishability = 0.6;
 
     std::filesystem::path genome_path("/home/zhenhao/data/taxonomy/DB.fa");
@@ -39,7 +39,7 @@ int main() {
     indexer->index(genome_path, index_path, indicator);
 
     // perform the mapping
-    auto mapper = new q_gram_mapper<33371>(bucket_len, read_len, segment_samples, shape, 2, samples, fault, distinguishability);
+    auto mapper = new q_gram_mapper<33371>(bucket_len, read_len, segment_samples, shape, 4, samples, fault, distinguishability);
     mapper->load(dict_path, index_path, indicator);
     auto res = mapper->map(query_path);
     _output("/home/zhenhao/TaxDB/sampled.output", res);

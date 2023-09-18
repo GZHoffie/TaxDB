@@ -36,6 +36,10 @@ private:
     unsigned int num_fault_tolerance;
     unsigned int allowed_max_candidate_buckets;
     std::vector<std::bitset<NUM_BUCKETS>> filters;
+    
+    // adaptive filter
+    std::bitset<NUM_BUCKETS> eliminated;
+    unsigned int num_matches;
 
     std::vector<unsigned int> _set_bits(unsigned int index) {
         /**
@@ -56,36 +60,73 @@ private:
         return res;
     }
 
+    unsigned int _index_in_circular_list(unsigned int index) {
+        /**
+         * @brief we record the filters in a circular list to avoid frequent copying during elimination of buckets.
+         * @param index an unsigned int between 0 and `num_fault_tolerance - 1`.
+         */
+        return (index + num_matches) % num_fault_tolerance;
+    }
+
+    void _eliminate_worst_buckets() {
+        /**
+         * @brief If sufficient number of k-mers are missed, eliminate that bucket.
+         */
+        // record the eliminated buckets
+        eliminated &= filters[_index_in_circular_list(0)];
+
+        // empty the `num_matches`-th filter
+        filters[_index_in_circular_list(0)].reset();
+        num_matches += 1;
+
+        //seqan3::debug_stream << "Eliminated worst bucket! Current num matches: " << num_matches << "\n";
+    }
+
 public:
     fault_tolerate_filter(unsigned int fault, unsigned int num_buckets) {
         num_fault_tolerance = fault;
         for (int i = 0; i < num_fault_tolerance; i++) {
             std::bitset<NUM_BUCKETS> filter;
-            filter.set();
             filters.push_back(filter);
         }
-        allowed_max_candidate_buckets = num_buckets;
+        eliminated.set();
+        num_matches = 0;
     }
 
     void reset() {
         for (int i = 0; i < num_fault_tolerance; i++) {
-            filters[i].set();
+            filters[i].reset();
         }
+        eliminated.set();
+        num_matches = 0;
     }
 
-    void read(const std::bitset<NUM_BUCKETS>& input) {
+    bool read(std::bitset<NUM_BUCKETS>& input) {
         /**
          * @brief Read a set of bits and filter out the indices at which they are 0.
          * @param input a bitset with size NUM_BUCKETS indicating whether a certain k-mer appear
          *              in each bucket. (0 at position i indicates that the k-mer doesn't exist 
          *              in bucket i)
+         * @returns a boolean value, true if a unique best bucket is found.
          */
-        // Record how many time we see a 0 for each bucket
-        for(unsigned int i = 0; i < num_fault_tolerance - 1; i++) {
-            filters[i] &= (filters[i+1] | input);
+        // ignore the eliminated buckets
+        input &= eliminated;
+
+        // Record how many time we see a 1 for each bucket
+        for (unsigned int i = num_fault_tolerance - 1; i > 0; i--) {
+            filters[_index_in_circular_list(i)] |= (filters[_index_in_circular_list(i-1)] & input);
         }
-        // Modify filters[size-1]
-        filters[num_fault_tolerance - 1] &= input;
+        // Modify filters[0]
+        filters[_index_in_circular_list(0)] |= input;
+
+        // check the number of best buckets observed
+        unsigned int num_best_buckets = filters[_index_in_circular_list(num_fault_tolerance - 1)].count();
+        if (num_best_buckets > 0) {
+            // eliminate the worst buckets
+            _eliminate_worst_buckets();
+            if (num_best_buckets == 1) return true;
+        }
+        return false;
     }
 
     std::pair<std::vector<unsigned int>, unsigned int> best_results() {
@@ -95,21 +136,14 @@ public:
          */
         std::vector<unsigned int> res;
         for (int i = num_fault_tolerance-1; i >= 0; i--) {
-            res = _set_bits(i);
+            res = _set_bits(_index_in_circular_list(i));
             if (!res.empty()) {
-                return std::make_pair(res, num_fault_tolerance + i);
+                return std::make_pair(res, num_matches + i + 1);
             }
         }
         return std::make_pair(res, 0);
     }
 
-    std::pair<std::vector<unsigned int>, unsigned int> all_results() {
-        /**
-         * @brief Return the buckets that contains adequate number of k-mers,
-         *        as well as the number of k-mers that are missed
-         */
-        return std::make_pair(_set_bits(0), num_fault_tolerance);
-    }
 
     int _check_bucket(unsigned int bucket_id) {
         /**
@@ -388,7 +422,7 @@ public:
     }
 
 
-    std::pair<std::vector<unsigned int>, unsigned int> query(const std::vector<std::vector<unsigned int>>& q_gram_hash) {
+    std::pair<std::vector<unsigned int>, unsigned int> query(const std::ranges::input_range auto& q_gram_hash) {
         /**
          * @brief From `q_grams_index`, determine where the sequence may be coming from.
          * @param q_gram_hash the vector containing all hash values of q-grams in the
@@ -405,15 +439,33 @@ public:
         // Reset the filter
         filter->reset();
 
+        // randomly shuffle the order of k-mers to be queried
+        std::vector<unsigned int> k_mer_index(q_gram_hash.size() - 2 * k);
+        std::iota(k_mer_index.begin(), k_mer_index.end(), k);
+        std::shuffle(k_mer_index.begin(), k_mer_index.end(), std::mt19937{std::random_device{}()});
+
+
         // insert those samples into the filter
-        for (auto vec : q_gram_hash) {
+        unsigned int num_kmers_queried = 0;
+        for (auto index : k_mer_index) {
             std::bitset<NUM_BUCKETS> hashes;
             hashes.set();
-            for (auto h : vec) {
+            //seqan3::debug_stream << "Queried k-mer: ";
+            for (int i = -k; i <= k; i++) {
+                //seqan3::debug_stream << q_gram_hash[index + i] << " ";
                 // use bitwise AND to find bucket that contains all of the k-mers
-                hashes &= q_grams_index[h];
+                hashes &= q_grams_index[q_gram_hash[index + i]];
             }
-            filter->read(hashes);
+            //seqan3::debug_stream << hashes.count();
+            //seqan3::debug_stream << "\n";
+            num_kmers_queried++;
+            //seqan3::debug_stream << "Queried kmer num: " << num_kmers_queried << "\n";
+            if (filter->read(hashes) && num_kmers_queried >= 40) break;
+        }
+        //seqan3::debug_stream << filter->best_results() << " " << num_kmers_queried << "\n";
+        if (((float) std::get<1>(filter->best_results())) / num_kmers_queried < 0.5) {
+            std::vector<unsigned int> res;
+            return std::make_pair(res, 0);
         }
         return filter->best_results();
         //return filter->all_results();
@@ -438,48 +490,16 @@ public:
         
         // get satisfactory k-mers that passes through quality filter and distinguishability filter
         auto kmers = sequence | seqan3::views::kmer_hash(q_gram_shape);
-        auto kmer_qualities = quality | seqan3::views::kmer_quality(q_gram_shape);
-        //_high_quality_kmers(quality);
-        std::vector<unsigned int> qualities(kmer_qualities.begin(), kmer_qualities.end());
         int num_kmers = kmers.size();
 
-        auto good_kmers = std::ranges::iota_view{0, num_kmers - k} | std::views::filter([&](unsigned int i) {
-                              return dist_filter->is_highly_distinguishable(kmers[i]) && qualities[i] >= min_base_quality;
-                          }) | std::views::transform([&](unsigned int i) {
-                              return kmers[i];
-                          });
-        std::vector<int> hash_values(good_kmers.begin(), good_kmers.end());
-
-        // if not enough q-grams ramained to determine the exact location, simply ignore this query sequence.
-        if (hash_values.size() < k + 1){
-            return std::make_tuple(candidates_orig, candidates_rev_comp, 0);
-        }
-
-        std::vector<std::vector<unsigned int>> samples_orig;
-        /*
-        // Randomly sample `num_samples` q-grams for query.
-        std::sample(hash_values.begin(), hash_values.end(), 
-                    std::back_inserter(samples_orig), num_samples,
-                    std::mt19937{std::random_device{}()});
-        */
-        // Deterministically sample from the hash values.
-        kmer_sampler->sample_deterministically(hash_values.size()-2 * k-1);
-        for (auto sample : kmer_sampler->samples) {
-            std::vector<unsigned int> samples;
-            for (int i = -k; i <= k; i++) {
-                samples.push_back(hash_values[sample + k + i]);
-            }
-            samples_orig.push_back(samples);
-        }
-
-        auto [buckets_orig, vote_orig] = query(samples_orig);
+        auto [buckets_orig, vote_orig] = query(kmers);
 
         // query the reverse complements of the sampled k-mers
-        auto samples_rev_comp = samples_orig | std::views::transform([&](std::vector<unsigned int> hash) {
+        auto samples_rev_comp = kmers | std::views::transform([&](unsigned int hash) {
             return hash_reverse_complement(hash, q);
         });
-        std::vector<std::vector<unsigned int>> samples_rev_comp_vec(samples_rev_comp.begin(), samples_rev_comp.end());
-        auto [buckets_rev, vote_rev] = query(samples_rev_comp_vec);
+        //std::vector<std::vector<unsigned int>> samples_rev_comp_vec(samples_rev_comp.begin(), samples_rev_comp.end());
+        auto [buckets_rev, vote_rev] = query(samples_rev_comp);
 
         // TODO: take the number of missed k-mers into consideration
         if (vote_rev >= vote_orig) candidates_rev_comp = buckets_rev;

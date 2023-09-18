@@ -63,6 +63,7 @@ class SamFileAnalyzer:
                         num_correct_species_predictions[groundTruth] += 1
                     
                     predictedGenus = self.taxDict.getGenus(ncbiID)
+
                     if predictedGenus == groundTruthGenus:
                         correct_genus = True
                         num_correct_genus_predictions[groundTruthGenus] += 1
@@ -88,10 +89,10 @@ class SamFileAnalyzer:
             num_correct_genus_predictions[genus] /= num_genus_predictions[genus]
         
 
-        print("Genus-level sensitivity:", correct_genus_prediction)
-        print("Species-level sensitivity:", correct_species_prediction)
-        print("Genus-level precision:", num_correct_genus_predictions)
-        print("Species-level precision:", num_correct_species_predictions)
+        #print("Genus-level sensitivity:", correct_genus_prediction)
+        #print("Species-level sensitivity:", correct_species_prediction)
+        #print("Genus-level precision:", num_correct_genus_predictions)
+        #print("Species-level precision:", num_correct_species_predictions)
 
         sensitivities = []
         precisions = []
@@ -110,12 +111,6 @@ class SamFileAnalyzer:
         print(self.baseline)#[:, 'species_id', 'sensitivity', 'precision', 'f1', 'BM_Sensitivity', 'BM_Precision', 'BM_F1'])
 
 
-        print()
-        for genus in correct_genus_prediction:
-            print(str(genus) + "\t\t" + str(correct_genus_prediction[genus]) + "\t\t\t" + str(num_correct_genus_predictions[genus]))
-
-        print(num_species)
-        
 
 if __name__ == "__main__":
     td = TaxonomyDict()

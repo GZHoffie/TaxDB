@@ -63,7 +63,7 @@ void sample_from_directory(const std::filesystem::path& fasta_dir, const std::fi
 
 
 int main() {
-    std::filesystem::path fasta_dir = "/home/zhenhao/data/taxonomy/mock/refs_in/refs_in/";
+    std::filesystem::path fasta_dir = "/home/zhenhao/data/taxonomy/mock/refs_in/";
     std::filesystem::path gt_dir = "/home/zhenhao/data/taxonomy/mock/test_dataset_metadata.csv";
     std::filesystem::path output_file = "/home/zhenhao/data/taxonomy/mock/sampled.fastq";
     std::filesystem::path output_ground_truth = "/home/zhenhao/data/taxonomy/mock/sampled_labels.fastq";

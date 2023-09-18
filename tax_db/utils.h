@@ -288,22 +288,18 @@ public:
  * @param k size of the k-mer
  * @return unsigned int the hash value of the reverse complement of the k-mer
  */
-std::vector<unsigned int> hash_reverse_complement(std::vector<unsigned int> hash_value, unsigned int k) {
-    std::vector<unsigned int> hash_value_reversed;
-    for (auto hash : hash_value) {
-        unsigned int hash_orig = hash;
-        unsigned int hash_rev_comp = 0;
-        for (unsigned int i = 0; i < k; i++) {
-            hash_rev_comp |= (~hash_orig) & 3;
-            if (i != k-1) {
-                hash_rev_comp <<= 2;
-                hash_orig >>= 2;
-            }
+unsigned int hash_reverse_complement(unsigned int hash_value, unsigned int k) {
+    unsigned int hash_orig = hash_value;
+    unsigned int hash_rev_comp = 0;
+    for (unsigned int i = 0; i < k; i++) {
+        hash_rev_comp |= (~hash_orig) & 3;
+        if (i != k-1) {
+            hash_rev_comp <<= 2;
+            hash_orig >>= 2;
         }
-        hash_value_reversed.push_back(hash_rev_comp);
     }
 
-    return hash_value_reversed;
+    return hash_rev_comp;
 }
 
 
