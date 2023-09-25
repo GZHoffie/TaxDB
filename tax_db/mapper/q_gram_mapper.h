@@ -460,7 +460,7 @@ public:
             //seqan3::debug_stream << "\n";
             num_kmers_queried++;
             //seqan3::debug_stream << "Queried kmer num: " << num_kmers_queried << "\n";
-            if (filter->read(hashes) && num_kmers_queried >= 40) break;
+            if (filter->read(hashes) && num_kmers_queried >= 20) break;
         }
         //seqan3::debug_stream << filter->best_results() << " " << num_kmers_queried << "\n";
         if (((float) std::get<1>(filter->best_results())) / num_kmers_queried < 0.5) {
@@ -495,9 +495,7 @@ public:
         auto [buckets_orig, vote_orig] = query(kmers);
 
         // query the reverse complements of the sampled k-mers
-        auto samples_rev_comp = kmers | std::views::transform([&](unsigned int hash) {
-            return hash_reverse_complement(hash, q);
-        });
+        auto samples_rev_comp = sequence | std::views::reverse | seqan3::views::complement | seqan3::views::kmer_hash(q_gram_shape);
         //std::vector<std::vector<unsigned int>> samples_rev_comp_vec(samples_rev_comp.begin(), samples_rev_comp.end());
         auto [buckets_rev, vote_rev] = query(samples_rev_comp);
 
