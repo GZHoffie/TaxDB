@@ -26,7 +26,7 @@ using seqan3::operator""_shape;
 
 
 template<unsigned int NUM_BUCKETS>
-class fault_tolerate_filter {
+class bucket_filter {
     /**
      * @brief Novel data structure for fast bit-parallel pop-count of multiple BitSet objects.
      *        Eliminating those BitSets with more than `num_fault_tolerance` zeros.
@@ -83,7 +83,7 @@ private:
     }
 
 public:
-    fault_tolerate_filter(unsigned int fault, unsigned int num_buckets) {
+    bucket_filter(unsigned int fault, unsigned int num_buckets) {
         num_fault_tolerance = fault;
         for (int i = 0; i < num_fault_tolerance; i++) {
             std::bitset<NUM_BUCKETS> filter;
@@ -227,7 +227,7 @@ private:
     unsigned int allowed_max_candidate_buckets;
 
     // filter that filter out the most possible bucket
-    fault_tolerate_filter<NUM_BUCKETS>* filter;
+    bucket_filter<NUM_BUCKETS>* filter;
 
     // Q-gram filters for map efficiency
     distinguishability_filter<NUM_BUCKETS>* dist_filter;
@@ -352,7 +352,7 @@ public:
         allowed_max_candidate_buckets = num_candidate_buckets;
 
         // initialize filter
-        filter = new fault_tolerate_filter<NUM_BUCKETS>(num_fault_tolerance, num_candidate_buckets);
+        filter = new bucket_filter<NUM_BUCKETS>(num_fault_tolerance, num_candidate_buckets);
         dist_filter = new distinguishability_filter<NUM_BUCKETS>(distinguishability);
         min_base_quality = quality_threshold * q;
 

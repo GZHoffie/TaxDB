@@ -90,6 +90,7 @@ set(INDEXER_FILES
     indexer/indexer.h
     indexer/bucket_indexer.h
     indexer/bucket_fm_indexer.h
+    indexer/consensus_indexer.h
     indexer/fm_indexer.h)
 
 set(MAPPER_FILES
@@ -117,6 +118,9 @@ target_link_libraries(generate_dataset PUBLIC seqan3::seqan3)
 add_executable(mapper_test mapper_test.cpp ${SHARED_FILES})
 target_link_libraries(mapper_test PUBLIC seqan3::seqan3)
 
+add_executable(consensus_test consensus_test.cpp ${SHARED_FILES})
+target_link_libraries(consensus_test PUBLIC seqan3::seqan3)
+
 add_executable(TAXDB main.cpp ${SHARED_FILES})
 target_compile_definitions(TAXDB PRIVATE ${BM_DEFINITIONS})
 target_link_libraries(TAXDB PUBLIC seqan3::seqan3 sharg::sharg)
@@ -126,6 +130,8 @@ target_link_libraries(fasta_to_fastq PUBLIC seqan3::seqan3)
 
 add_executable(isolate_sequences tools/isolate_sequences.cpp)
 target_link_libraries(isolate_sequences PUBLIC seqan3::seqan3)
+
+
 
 #get_property(defs TARGET TAXDB_align PROPERTY COMPILE_DEFINITIONS)
 #message("Defs: ${defs}")

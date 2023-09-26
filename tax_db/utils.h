@@ -101,6 +101,40 @@ void iterate_through_buckets(std::filesystem::path const & fasta_file_name, int 
     }
 }
 
+void iterate_through_buckets(const seqan3::dna4_vector& sequence, unsigned int id, int bucket_length, int read_length, 
+                             std::function<void(const seqan3::bitpacked_sequence<seqan3::dna4>&, unsigned int)> op, bool print_info = false) {
+    /**
+     * @brief Util function that is used to iterate through all buckets in the reference genome, end execute
+     *        some operation on each of the bucket.
+     * @param sequence sequence to be read.
+     * @param op an std::function object that takes in a bucket (std::vector<seqan3::dna4>) and returns nothing.
+     * @param print_info whether we verbosely print out the bucket information.
+     */
+    // Divide the record into buckets
+    float total_length = (float) sequence.size();
+    int num_buckets = (int) ceil(total_length / bucket_length);
+    if (print_info) {
+        seqan3::debug_stream << "[INFO]\t\t" << id << " with length " << (int) total_length
+                             << " divided into " << num_buckets << " buckets.\n";
+    }
+            
+    // read each bucket
+    for (int i = 0; i < num_buckets; i++) {
+        int start = i * bucket_length;
+        int end = start + bucket_length + read_length;
+        if (end > sequence.size()) {
+            end = sequence.size();
+        }
+        if (end - start <= read_length) {
+            continue;
+        }
+        std::vector<seqan3::dna4> seq(&sequence[start], &sequence[end]);
+        seqan3::bitpacked_sequence<seqan3::dna4> bucket_sequence(seq);
+        //std::vector<seqan3::dna4> bucket_sequence(&record.sequence()[start], &record.sequence()[end]);
+        op(bucket_sequence, id);
+    }
+}
+
 bool check_extension_in(std::filesystem::path const & index_directory,
                             std::string ext) {
     /**
